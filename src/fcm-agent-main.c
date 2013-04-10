@@ -173,7 +173,7 @@ void agent_loop(fcm_opts_t *opts)
         break;
       }
     }
-    //TODO(grier): Add process name to output here
+
     while ((*cpid = wait(cstatus)) > 0)
     {
       cpid_string = apr_itoa(subpool, *cpid);
