@@ -29,5 +29,6 @@ typedef struct {
 
 void agent_loop(fcm_opts_t *opts);
 int run_module(fcm_opts_t *opts, char *agent_file, char *data_file);
+int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]);
 
 #endif
