@@ -103,6 +103,7 @@ int main(int argc, char *argv[])
 
 void agent_loop(fcm_opts_t *opts)
 {
+
   DIR *dir_h;
   struct dirent *file;
   struct stat *af;
@@ -110,22 +111,33 @@ void agent_loop(fcm_opts_t *opts)
   char *agent_file = NULL;
   char *data_file = NULL;
   char *module_name = NULL;
+  char *pid_string = NULL;
+  char *cpid_string = NULL;
   apr_hash_t *pid_map = NULL;
-  pid_t cpid;
-  int mod_pid;
-  int cstatus;
+  pid_t *cpid;
+  int *mod_pid;
+  int *cstatus;
 
-  dir_h = apr_palloc(opts->pool, sizeof(dir_h));
-  file = apr_palloc(opts->pool, sizeof(struct dirent));
-  af = apr_palloc(opts->pool, sizeof(struct stat));
-  df = apr_palloc(opts->pool, sizeof(struct stat));
-  agent_file = apr_palloc(opts->pool, PATH_MAX);
-  data_file = apr_palloc(opts->pool, PATH_MAX);
-  module_name = apr_palloc(opts->pool, PATH_MAX);
-  pid_map = apr_hash_make(opts->pool);
 
   while(1)
   {
+    apr_pool_t *subpool;
+    apr_pool_create(&subpool, opts->pool);
+
+    dir_h = apr_palloc(subpool, sizeof(dir_h));
+    file = apr_palloc(subpool, sizeof(struct dirent));
+    af = apr_palloc(subpool, sizeof(struct stat));
+    df = apr_palloc(subpool, sizeof(struct stat));
+    agent_file = apr_palloc(subpool, PATH_MAX);
+    data_file = apr_palloc(subpool, PATH_MAX);
+    module_name = apr_palloc(subpool, PATH_MAX);
+    pid_string = apr_palloc(subpool, 8);
+    cpid_string = apr_palloc(subpool, 8);
+    pid_map = apr_hash_make(subpool);
+    cpid = apr_palloc(subpool, sizeof(pid_t));
+    mod_pid = apr_palloc(subpool, sizeof(int));
+    cstatus = apr_palloc(subpool, sizeof(int));
+
     apr_file_printf(opts->out, "\nWaking up for run\n");
     dir_h = opendir(opts->agent_dir);
     while (dir_h)
@@ -140,13 +152,14 @@ void agent_loop(fcm_opts_t *opts)
         else
         {
           if (opts->verbose) apr_file_printf(opts->out, "Found: %s/%s\n", opts->agent_dir, file->d_name);
-          agent_file = apr_psprintf(opts->pool, "%s/%s", opts->agent_dir, file->d_name);
-          data_file = apr_psprintf(opts->pool, "%s/%s", opts->data_dir, file->d_name);
+          agent_file = apr_psprintf(subpool, "%s/%s", opts->agent_dir, file->d_name);
+          data_file = apr_psprintf(subpool, "%s/%s", opts->data_dir, file->d_name);
           if (stat(agent_file, af) == 0 && S_ISREG(af->st_mode) && stat(data_file, df) == 0 && S_ISREG(df->st_mode))
           {
             apr_file_printf(opts->out, "Running: %s %s\n", agent_file, data_file);
-            mod_pid = run_module(opts, agent_file, data_file);
-            apr_hash_set(pid_map, apr_itoa(opts->pool, mod_pid), APR_HASH_KEY_STRING, agent_file);
+            *mod_pid = run_module(opts, agent_file, data_file);
+            pid_string = apr_itoa(subpool, *mod_pid);
+            apr_hash_set(pid_map, pid_string, APR_HASH_KEY_STRING, agent_file);
           }
           else
           {
@@ -161,14 +174,18 @@ void agent_loop(fcm_opts_t *opts)
       }
     }
     //TODO(grier): Add process name to output here
-    while ((cpid = wait(&cstatus)) > 0)
+    while ((*cpid = wait(cstatus)) > 0)
     {
-      module_name = apr_hash_get(pid_map, apr_itoa(opts->pool, cpid), APR_HASH_KEY_STRING);
-      apr_file_printf(opts->out, "Child %s (%ld) terminated with ret code %i\n", module_name, cpid, cstatus);
+      cpid_string = apr_itoa(subpool, *cpid);
+      module_name = apr_hash_get(pid_map, cpid_string, APR_HASH_KEY_STRING);
+      apr_file_printf(opts->out, "Child %s (%s) terminated with ret code %i\n", module_name, cpid_string, *cstatus);
     }
 
     apr_file_printf(opts->out, "Loop end, sleeping for %i\n", opts->sleep_time);
+
     if (opts->run_once) break;
+
+    apr_pool_destroy(subpool);
     sleep(opts->sleep_time);
   }
 }
