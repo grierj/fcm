@@ -69,12 +69,13 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
   {
     apr_file_printf(opts->err, "Base directory '%s' does not exist\n",
         opts->base_dir);
-    return 1
+    return 1;
   }
 
   if (check_dir_exists(opts->agent_dir) != 0)
   {
-    with_base_path = apr_pstrcat(opts->base_dir, "/", opts->agent_dir)
+    with_base_path = apr_pstrcat(opts->base_dir, "/", opts->agent_dir);
+  }
 
 
   return 0;

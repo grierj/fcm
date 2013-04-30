@@ -1,6 +1,5 @@
-export CFLAGS=`apr-1-config --cflags`
-export CPPFLAGS=`apr-1-config --cppflags`
-export LINK_LD=`apr-1-config --link-ld`
-CMD="gcc $CFLAGS $CPPFLAGS -g -I/usr/include/apr-1 $LINK_LD fcm-agent-main.c fcm-agent.c -o fcm-agent"
+export APR_FLAGS=`apr-1-config --cflags --cppflags --link-ld`
+export APR_INCLUDE=`apr-1-config --includedir`
+CMD="gcc $APR_FLAGS -g -I${APR_INCLUDE} fcm-agent-main.c fcm-agent.c -o fcm-agent"
 echo $CMD
 $CMD
