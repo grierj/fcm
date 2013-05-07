@@ -1,0 +1,26 @@
+#!/usr/bin/ruby
+$:.push(File.join(File.dirname(__FILE__), '../lib'))
+
+require 'fcm-agent-tools'
+
+GROUP = '/etc/group'
+OWNER = 'root'
+GROUP = 'root'
+PERM = 0444
+
+f = FCM::Agent.new
+
+begin
+  # Don't do anything if the files are the same
+  unless f.diff(GROUP, f.filedata)
+    return 0
+  end
+  begin
+    f.install_file(GROUP, OWNER, GROUP, PERM)
+  rescue => x
+    raise "Failed to install group file: #{x}"
+  end
+rescue => x
+  puts "General group file exception: #{x}"
+end
+
