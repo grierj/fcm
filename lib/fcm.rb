@@ -1,8 +1,13 @@
 #!/usr/bin/ruby
 require 'yaml'
 require 'md5'
+require 'uri'
+require 'fcm/fetch'
 
 module FCM
+  class Error < StandardError
+  end
+
   def self.bucketize(group_list)
     return Digest::MD5.hexdigest(group_list.to_s)
   end
@@ -24,10 +29,10 @@ module FCM
       end
     end
 
-    link_nodes(nodes, directory, bucket)
+    link_nodes(nodes, directory, bucket_dir)
   end
 
-  def self.link_nodes(nodes, directory, bucket)
+  def self.link_nodes(nodes, directory, bucket_dir)
     nodes.each do |n|
       node_link = File.join(directory, n.name)
       if File.symlink?(node_link)
@@ -39,7 +44,7 @@ module FCM
       elsif File.exists?(node_link)
         raise "Non-symlink node file #{node_link}.  Will not delete"
       end
-      File.symlink(File.join(directory, bucket), node_link)
+      File.symlink(bucket_dir, node_link)
     end
   end
 
@@ -127,7 +132,7 @@ module FCM
     end
   end  
 
-  module FCM::Actions
+  module Actions
     def self.handle_dedup(input, action_data, group, config)
       unless action_data == nil
         raise "Parse error: DEDUP takes no arguments"
@@ -192,7 +197,7 @@ module FCM
       output = []
       regex = Regexp.new(action_data)
       input.each do |line|
-        output += line unless regex.match(line.content)
+        output.push(line) unless regex.match(line.content)
       end
       
       return output
@@ -214,7 +219,36 @@ module FCM
       return input + lines
     end
 
-    @handlers = %w[TRUNCATE APPEND INCLUDE DELETERE REPLACERE INCLUDELINE DEDUP].inject({}) do |h,type|
+    def self.handle_fetch(input, action_data, group, config)
+      fetch_uri = nil
+      begin
+        fetch_uri = URI.parse(action_data)
+      rescue URI::InvalidURIError
+        raise FCM::Error("Parse error: FETCH takes a URI")
+      end
+
+      # If the URI has a group macro in it, replace it
+      fetch_uri.path.gsub!('%GROUP%', group)
+
+      # Get a fetcher
+      fetcher = FCM::Action::Fetch.new(fetch_uri)
+
+      data = nil
+      begin
+        data = fetcher.get
+      rescue FCM::Action::FetchError => e
+        raise FCM::Error("Failed to fetch #{action_data}: #{e}")
+      end
+
+      lines = []
+      data.each do |d|
+        lines << FCM::Line.new(group, d)
+      end
+    
+      return input + lines
+    end
+
+    @handlers = %w[TRUNCATE APPEND INCLUDE DELETERE REPLACERE INCLUDELINE DEDUP FETCH].inject({}) do |h,type|
       h[type] = method("handle_#{type.downcase}")
       h
     end

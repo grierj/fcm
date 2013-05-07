@@ -1,0 +1,2 @@
+- TRUNCATE
+- FETCH: "http://userdb.stage.vip.sjc1.square/api/v1/files/group"

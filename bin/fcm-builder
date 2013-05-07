@@ -1,4 +1,6 @@
 #!/usr/bin/ruby
+#
+$:.push(File.join(File.dirname(__FILE__), '../lib'))
 
 require 'fcm'
 require 'getoptlong'
