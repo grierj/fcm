@@ -219,36 +219,7 @@ module FCM
       return input + lines
     end
 
-    def self.handle_fetch(input, action_data, group, config)
-      fetch_uri = nil
-      begin
-        fetch_uri = URI.parse(action_data)
-      rescue URI::InvalidURIError
-        raise FCM::Error("Parse error: FETCH takes a URI")
-      end
-
-      # If the URI has a group macro in it, replace it
-      fetch_uri.path.gsub!('%GROUP%', group)
-
-      # Get a fetcher
-      fetcher = FCM::Action::Fetch.new(fetch_uri)
-
-      data = nil
-      begin
-        data = fetcher.get
-      rescue FCM::Action::FetchError => e
-        raise FCM::Error("Failed to fetch #{action_data}: #{e}")
-      end
-
-      lines = []
-      data.each do |d|
-        lines << FCM::Line.new(group, d)
-      end
-    
-      return input + lines
-    end
-
-    @handlers = %w[TRUNCATE APPEND INCLUDE DELETERE REPLACERE INCLUDELINE DEDUP FETCH].inject({}) do |h,type|
+    @handlers = %w[TRUNCATE APPEND INCLUDE DELETERE REPLACERE INCLUDELINE DEDUP].inject({}) do |h,type|
       h[type] = method("handle_#{type.downcase}")
       h
     end
