@@ -1,15 +1,20 @@
 #!/usr/bin/ruby
+$:.push(File.join(File.dirname('__FILE__'), '../lib'))
 
-require '../lib/fcm-agent-tools.rb'
 require 'yaml'
 require 'etc'
 require 'fileutils'
+require 'fcm-agent-tools'
 
 f = FCM::Agent.new
 
 usermap = YAML.load(f.filedata)
 usermap.each do |username, data|
-  userdir = Etc.getpwnam(username)['dir']
+  if data.member?('homedir')
+    userdir = data['homedir']
+  else
+    userdir = Etc.getpwnam(username)['dir']
+  end
 
   unless File.directory?(userdir)
     puts "Creating homedir #{userdir} for #{username}"
