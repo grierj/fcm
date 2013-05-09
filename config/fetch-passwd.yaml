@@ -1,0 +1,2 @@
+out: "../testdata/raw/passwd"
+uri: "http://userdb.stage.vip.sjc1.square/api/v1/files/passwd"
