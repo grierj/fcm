@@ -7,7 +7,8 @@
 int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
   int c;
   char full_path[PATH_MAX];
-  char with_base_path[PATH_MAX];
+  // Wat?
+  //char with_base_path[PATH_MAX];
 
   // Args
   // -a = agent dir
@@ -74,7 +75,9 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
 
   if (check_dir_exists(opts->agent_dir) != 0)
   {
-    with_base_path = apr_pstrcat(opts->base_dir, "/", opts->agent_dir);
+    //What was I doing here?
+    //with_base_path = apr_pstrcat(opts->pool, opts->base_dir, "/", opts->agent_dir);
+    opts->agent_dir = apr_pstrcat(opts->pool, opts->base_dir, "/", opts->agent_dir);
   }
 
 
@@ -176,7 +179,8 @@ void agent_loop(fcm_opts_t *opts)
     if (opts->run_once) break;
 
     apr_pool_destroy(subpool);
-    apr_sleep(opts->sleep_time);
+    // sleep time in seconds, apr_sleep in microseconds
+    apr_sleep(opts->sleep_time * 1000000);
   }
 }
 

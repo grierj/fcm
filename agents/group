@@ -3,7 +3,7 @@ $:.push(File.join(File.dirname(__FILE__), '../lib'))
 
 require 'fcm-agent-tools'
 
-GROUP = '/etc/group'
+GRP_FILE = '/etc/group'
 OWNER = 'root'
 GROUP = 'root'
 PERM = 0444
@@ -12,11 +12,11 @@ f = FCM::Agent.new
 
 begin
   # Don't do anything if the files are the same
-  unless f.diff(GROUP, f.filedata)
+  unless f.diff(GRP_FILE, f.filedata)
     return 0
   end
   begin
-    f.install_file(GROUP, OWNER, GROUP, PERM)
+    f.install_file(GRP_FILE, OWNER, GROUP, PERM)
   rescue => x
     raise "Failed to install group file: #{x}"
   end
