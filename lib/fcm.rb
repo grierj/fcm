@@ -13,6 +13,7 @@ module FCM
   end
 
   def self.write_files(nodes, directory, bucket)
+    directory = directory
     buckets_dir = File.join(directory, "buckets")
     bucket_dir = File.join(buckets_dir, bucket)
     needed_dirs = [directory, buckets_dir, bucket_dir]
@@ -29,10 +30,10 @@ module FCM
       end
     end
 
-    link_nodes(nodes, directory, bucket_dir)
+    link_nodes(nodes, directory, bucket)
   end
 
-  def self.link_nodes(nodes, directory, bucket_dir)
+  def self.link_nodes(nodes, directory, bucket)
     nodes.each do |n|
       node_link = File.join(directory, n.name)
       if File.symlink?(node_link)
@@ -44,7 +45,7 @@ module FCM
       elsif File.exists?(node_link)
         raise "Non-symlink node file #{node_link}.  Will not delete"
       end
-      File.symlink(bucket_dir, node_link)
+      File.symlink(File.join('buckets', bucket), node_link)
     end
   end
 
@@ -226,7 +227,7 @@ module FCM
 
     # input is an array
     def self.apply(input, type, action_data, group, config)
-      raise "Invalid type" unless @handlers.has_key?(type)
+      raise "Invalid type '#{type}' in #{group}" unless @handlers.has_key?(type)
       @handlers[type].call(input, action_data, group, config)
     end
 
