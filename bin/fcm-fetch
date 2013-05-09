@@ -1,0 +1,132 @@
+#!/usr/bin/ruby
+# Grab files from a remote location for inclusion into FCM
+require 'net/http'
+require 'optparse'
+require 'ostruct'
+require 'pp'
+require 'uri'
+require 'yaml'
+
+module FCM
+  class FetchError < StandardError
+  end
+
+  class Fetch
+    attr_accessor :method, :getter
+    attr_reader :uri
+    def initialize(uri)
+      @method = uri.scheme
+      @uri = uri
+      @getter = "get_#{@method}"
+      unless self.respond_to?(@getter.to_sym)
+        raise FCM::FetchError, "Unsupported fetch method: #{@method}"
+      end
+    end
+
+    def get
+      return self.send(@getter)
+    end
+
+    def get_http
+      require 'net/http'
+      req = Net::HTTP::Get.new(@uri.path)
+      http = Net::HTTP.new(@uri.host, @uri.port)
+      resp = http.request(req)
+      return http_response(resp)
+    end
+
+    def get_https
+      require 'net/https'
+      req = Net::HTTP::Get.new(@uri.path)
+      http = Net::HTTP.new(@uri.host, @uri.port)
+      http.use_ssl = true
+      http.ca_path = get_ca_path
+      http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      http.verify_depth = 5
+      resp = http.request(req)
+      return http_response(resp)
+    end
+
+    def http_response(resp)
+      if resp.code != '200'
+        raise FCM::FetchError, "Invalid response code #{resp.code} for #{@uri}"
+      end
+      return resp.body
+    end
+
+    def get_ca_path(paths=[])
+      paths.push('/data/app/secrets', '/etc/ssl/certs')
+      paths.each do |p|
+        if File.exists?(p) and File.directory?(p)
+          return p
+        end
+      end
+    end
+  end
+end
+
+
+options = OpenStruct.new
+
+optparse = OptionParser.new do |opts|
+  opts.banner = "Usage: #{__FILE__} [options]"
+  opts.on('-o', '--out FILE', "The file to output") do |arg|
+    options.out = File.expand_path(arg)
+  end
+  opts.on('-c', '--config FILE', "A config file to use") do |arg|
+    options.config = File.expand_path(arg)
+  end
+  opts.on('-u', '--uri URI', "The uri of where to fetch your file") do |arg|
+    options.uri = arg
+  end
+end
+
+optparse.parse!
+
+unless (options.out and options.uri) or options.config
+  $stderr.puts "You must specify an out file and url or a config file containing that information"
+  exit 1
+end
+
+unless options.config.nil?
+  if File.exists?(options.config)
+    c = YAML.load_file(options.config)
+    options.out ||= c['out']
+    options.uri ||= c['uri']
+    if options.out.nil? or options.uri.nil?
+      $stderr.puts "Your config must contain an 'out' and 'uri' directive"
+      exit 1
+    end
+  else
+    $stderr.puts "The config file '#{options.config}' does not exist"
+    exit 1
+  end
+end
+
+if options.out.nil? or options.uri.nil?
+  $stderr.puts "You must specify a URI and output file"
+  exit 1
+end
+
+# Allow relative pathing from the config
+options.out = File.expand_path(options.out, File.dirname(options.config))
+
+# Turn the URI string into a URI object
+options.uri = URI.parse(options.uri)
+
+
+puts "Fetching #{options.uri}..."
+fetcher = FCM::Fetch.new(options.uri)
+resp = fetcher.get
+unless resp.empty?
+  puts "Writing out to #{options.out}..."
+  File.open(options.out, 'w') do |fh|
+    fh.write(resp)
+  end
+else
+  $stderr.puts "The response from #{fetcher.uri} was empty"
+  exit 1
+end
+
+puts "Complete!"
+exit 0
