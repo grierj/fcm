@@ -29,12 +29,6 @@ typedef struct {
   apr_pool_t *pool;
 } fcm_opts_t;
 
-typedef struct {
-  apr_time_t start_time;
-  apr_time_t kill_after;
-  pid_t pid;
-} fcm_proc_t;
-
 void agent_loop(fcm_opts_t *opts);
 int run_module(fcm_opts_t *opts, char *agent_file, char *data_file);
 int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]);
