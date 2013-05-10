@@ -1,5 +1,11 @@
 /*
  * A C implementation of the perl fcm-agent
+ *
+ * This is the main function, it establishes the APR pool and fcm_opts_t struct.
+ * After that it runs the agent loop.
+ * There should be minimal logic in this file, please farm out things
+ * to fcm-agent.c
+ *
  */
 
 #include "fcm.h"
@@ -42,6 +48,7 @@ int main(int argc, char *argv[])
   ret = fcm_parse_opts(opts, argc, argv);
   if (ret != 0) return ret;
 
+  // TODO(grier): Move this to fcm-agent.c
   if(stat(opts->agent_dir, &ad) != 0 || ! S_ISDIR(ad.st_mode))
   {
     apr_file_printf(err, "Agent directory does not exist: %s\n", opts->agent_dir);
