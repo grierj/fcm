@@ -18,7 +18,7 @@
 #include <apr_hash.h>
 
 typedef struct {
-  apr_interval_time_t sleep_time;
+  apr_interval_time_t itr_time;
   int verbose;
   int run_once;
   char *agent_dir;

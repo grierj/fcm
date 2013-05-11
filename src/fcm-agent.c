@@ -41,15 +41,15 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
         apr_file_printf(opts->out, "-b: Base FCM dir\n");
         apr_file_printf(opts->out, "-d: Data directory\n");
         apr_file_printf(opts->out, "-r: csv of scripts to run\n");
-        apr_file_printf(opts->out, "-s: sleep time between runs\n");
+        apr_file_printf(opts->out, "-i: iteration time (in seconds)\n");
         apr_file_printf(opts->out, "-v: print verbose messages\n");
         apr_file_printf(opts->out, "-h: this help message\n");
         return 1;
+      case 'i':
+        opts->itr_time = apr_atoi64(optarg);
+        break;
       case 'o':
         opts->run_once = 1;
-        break;
-      case 's':
-        opts->sleep_time = apr_atoi64(optarg);
         break;
       case 'v':
         opts->verbose = 1;
@@ -140,7 +140,8 @@ void agent_loop(fcm_opts_t *opts)
     //hi = apr_palloc(subpool, sizeof(apr_hash_index_t));
     now_micro = apr_palloc(subpool, sizeof(apr_time_t));
     until_micro = apr_palloc(subpool, sizeof(apr_time_t));
-    sleep_micro = apr_palloc(subpool, sizeof(apr_time_t));
+    // allocate in the main pool
+    sleep_micro = apr_palloc(opts->pool, sizeof(apr_time_t));
     curr_pid = apr_palloc(subpool, sizeof(pid_t));
     cpid = apr_palloc(subpool, sizeof(pid_t));
     mod_pid = apr_palloc(subpool, sizeof(int));
@@ -152,7 +153,7 @@ void agent_loop(fcm_opts_t *opts)
     // Now is the start of the iteration, until is when we should start
     // killing processes
     *now_micro = apr_time_now();
-    until_micro = (now_micro + (opts->sleep_time * 1000000));
+    until_micro = (now_micro + (opts->itr_time * 1000000));
 
     while (dir_h)
     {
@@ -251,12 +252,18 @@ void agent_loop(fcm_opts_t *opts)
     if (until_micro > now_micro)
     {
       *sleep_micro = until_micro - now_micro;
-      apr_file_printf(opts->out, "Loop end, sleeping for %i\n", *sleep_micro/1000000);
-      apr_sleep(*sleep_micro);
+      apr_file_printf(opts->out, "Loop end, sleeping for %i seconds\n", *sleep_micro/1000000);
+    } 
+    else
+    {
+      *sleep_micro = 0;
     }
 
     // remove the subpool every run
     apr_pool_destroy(subpool);
+
+    // Sleep after the pool destroy so we can more easily test for leaks
+    apr_sleep(*sleep_micro);
   }
 }
 

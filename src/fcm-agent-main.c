@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
   opts->base_dir = apr_pstrdup(pool, "/var/fcm");
   opts->agent_dir = NULL;
   opts->data_dir = NULL;
-  opts->sleep_time = 600;
+  opts->itr_time = 600;
   opts->verbose = 0;
   opts->run_once = 0;
   opts->out = out;
