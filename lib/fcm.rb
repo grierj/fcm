@@ -13,6 +13,7 @@ module FCM
   end
 
   def self.write_files(nodes, directory, bucket)
+    directory = directory
     buckets_dir = File.join(directory, "buckets")
     bucket_dir = File.join(buckets_dir, bucket)
     needed_dirs = [directory, buckets_dir, bucket_dir]
