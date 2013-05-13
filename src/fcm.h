@@ -32,5 +32,7 @@ typedef struct {
 void agent_loop(fcm_opts_t *opts);
 int run_module(fcm_opts_t *opts, char *agent_file, char *data_file);
 int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]);
+int pid_hash_wait_with_timeout(fcm_opts_t *opts, apr_hash_t *pid_hash, int timeout);
+void pid_hash_send_signal(fcm_opts_t *opts, apr_hash_t *pid_hash, int signal);
 
 #endif

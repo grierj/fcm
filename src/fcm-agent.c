@@ -19,7 +19,7 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
   // -s = sleep time
   // -v = verbose
   //
-  while ((c = getopt (argc, argv, "a:b:d:hos:v")) != -1)
+  while ((c = getopt (argc, argv, "a:b:d:hoi:v")) != -1)
   {
     switch (c)
     {
@@ -55,7 +55,7 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
         opts->verbose = 1;
         break;
       case '?':
-        if (optopt == 'a' || optopt == 'd' || optopt == 's')
+        if (optopt == 'a' || optopt == 'd' || optopt == 'i')
           apr_file_printf(opts->err, "Option -%a requires and argument.\n", optopt);
         else if (isprint (optopt))
           apr_file_printf(opts->err, "Unknown option -%c\n", optopt);
@@ -104,21 +104,17 @@ void agent_loop(fcm_opts_t *opts)
   struct stat *df;
   char *agent_file = NULL;
   char *data_file = NULL;
-  char *module_name = NULL;
   char *pid_string = NULL;
-  char *cpid_string = NULL;
   apr_hash_t *pid_map = NULL;
   apr_hash_t *running_pids = NULL;
-  apr_hash_index_t *hi;
   apr_time_t *now_micro;
   apr_time_t *until_micro;
   apr_time_t *sleep_micro;
-  pid_t *cpid;
-  pid_t *curr_pid;
   int *mod_pid;
-  int *cstatus;
+  int *pid_count;
 
 
+  apr_file_printf(opts->out, "\nEntering loop...\n");
   while(1)
   {
     // Make a subpool for each run of the loop
@@ -132,20 +128,13 @@ void agent_loop(fcm_opts_t *opts)
     df = apr_palloc(subpool, sizeof(struct stat));
     agent_file = apr_palloc(subpool, PATH_MAX);
     data_file = apr_palloc(subpool, PATH_MAX);
-    module_name = apr_palloc(subpool, PATH_MAX);
     pid_string = apr_palloc(subpool, 8);
-    cpid_string = apr_palloc(subpool, 8);
     pid_map = apr_hash_make(subpool);
-    running_pids = apr_hash_make(subpool);
-    //hi = apr_palloc(subpool, sizeof(apr_hash_index_t));
     now_micro = apr_palloc(subpool, sizeof(apr_time_t));
     until_micro = apr_palloc(subpool, sizeof(apr_time_t));
-    // allocate in the main pool
-    sleep_micro = apr_palloc(opts->pool, sizeof(apr_time_t));
-    curr_pid = apr_palloc(subpool, sizeof(pid_t));
-    cpid = apr_palloc(subpool, sizeof(pid_t));
+    sleep_micro = apr_palloc(subpool, sizeof(apr_time_t));
     mod_pid = apr_palloc(subpool, sizeof(int));
-    cstatus = apr_palloc(subpool, sizeof(int));
+    pid_count = apr_palloc(subpool, sizeof(int));
 
     apr_file_printf(opts->out, "\nWaking up for run\n");
     dir_h = opendir(opts->agent_dir);
@@ -153,7 +142,7 @@ void agent_loop(fcm_opts_t *opts)
     // Now is the start of the iteration, until is when we should start
     // killing processes
     *now_micro = apr_time_now();
-    until_micro = (now_micro + (opts->itr_time * 1000000));
+    *until_micro = (*now_micro + (opts->itr_time * 1000000));
 
     while (dir_h)
     {
@@ -175,7 +164,6 @@ void agent_loop(fcm_opts_t *opts)
             *mod_pid = run_module(opts, agent_file, data_file);
             pid_string = apr_itoa(subpool, *mod_pid);
             apr_hash_set(pid_map, pid_string, APR_HASH_KEY_STRING, agent_file);
-            apr_hash_set(running_pids, pid_string, APR_HASH_KEY_STRING, now_micro);
           }
           else
           {
@@ -190,80 +178,47 @@ void agent_loop(fcm_opts_t *opts)
       }
     }
 
-    // Old blocking method
-    //while ((*cpid = wait(cstatus)) > 0)
-    //{
-    //  cpid_string = apr_itoa(subpool, *cpid);
-    //  module_name = apr_hash_get(pid_map, cpid_string, APR_HASH_KEY_STRING);
-    //  apr_file_printf(opts->out, "Child %s (%s) terminated with ret code %i\n", module_name, cpid_string, *cstatus);
-    //}
-
-    // New non-blocking method
     // Iterate over the children until they're all gone or we run out of time
-    apr_file_printf(opts->out, "Looking at pids\n");
-    while ((apr_hash_count(running_pids) != 0) && (*until_micro > apr_time_now()))
+    apr_file_printf(opts->out, "Waiting for agents\n");
+    *pid_count = pid_hash_wait_with_timeout(opts, pid_map, opts->itr_time);
+    apr_file_printf(opts->out, "Done waiting for agents\n");
+    if (*pid_count > 0)
     {
-      apr_file_printf(opts->out, "Looking at hash\n");
-      for (hi = apr_hash_first(opts->pool, running_pids); hi; hi = apr_hash_next(hi))
+      apr_file_printf(opts->out, "%i agents remain, sending SIGTERM\n", *pid_count);
+      pid_hash_send_signal(opts, pid_map, SIGTERM);
+      apr_file_printf(opts->out, "Waiting for agents to cleanly shut down\n");
+      // 30 seconds to get in line and clean up
+      *pid_count = pid_hash_wait_with_timeout(opts, pid_map, 30);
+      if (*pid_count > 0)
       {
-        // don't care about the length or value
-        apr_hash_this(hi, (void *)cpid_string, NULL, NULL);
-        // We've hit the end if we're null
-        if (cpid_string != NULL)
-        {
-          *curr_pid = apr_atoi64(cpid_string);
-          *cpid = waitpid(*curr_pid, cstatus, WNOHANG);
-          // WNOHANG returns -1 on state change, 0 on no change
-          if (cpid != 0)
-          {
-            // remove the running pid entry
-            apr_hash_set(running_pids, cpid_string, APR_HASH_KEY_STRING, NULL);
-            // get our module name
-            module_name = apr_hash_get(pid_map, cpid_string, APR_HASH_KEY_STRING);
-            // print some stuff
-            apr_file_printf(opts->out, "Child %s (%s) terminated with ret code %i\n", module_name, cpid_string, *cstatus);
-          }
-        }
+        apr_file_printf(opts->out, "%i agents remain, sending SIGKILL\n", *pid_count);
+        pid_hash_send_signal(opts, pid_map, SIGKILL);
       }
+      apr_file_printf(opts->out, "Done killing agents\n");
     }
-    apr_file_printf(opts->out, "Done looking at pids\n");
-    // Still some running pids
-    if (apr_hash_count(running_pids) != 0)
-    {
-      for (hi = apr_hash_first(opts->pool, running_pids); hi; hi = apr_hash_next(hi))
-      {
-        // don't care about the length or value
-        apr_hash_this(hi, (void *)cpid_string, NULL, NULL);
-        // We've hit the end if we're null
-        if (cpid_string != NULL)
-        {
-          *curr_pid = apr_atoi64(cpid_string);
-          kill(*curr_pid, SIGKILL);
-        }
-      }
-    }
-    apr_file_printf(opts->out, "Done killing pids\n");
 
     // don't sleep if we're only running once
     if (opts->run_once) break;
 
     // Still time left to sleep?
     *now_micro = apr_time_now();
-    if (until_micro > now_micro)
+    if (*until_micro > *now_micro)
     {
-      *sleep_micro = until_micro - now_micro;
+      *sleep_micro = *until_micro - *now_micro;
       apr_file_printf(opts->out, "Loop end, sleeping for %i seconds\n", *sleep_micro/1000000);
     } 
     else
     {
       *sleep_micro = 0;
+      apr_file_printf(opts->out, "No time left in this iteration, restarting immediately");
     }
+
+    // Sleep for the remaining time, possibly 0
+    apr_sleep(*sleep_micro);
 
     // remove the subpool every run
     apr_pool_destroy(subpool);
 
-    // Sleep after the pool destroy so we can more easily test for leaks
-    apr_sleep(*sleep_micro);
   }
 }
 
@@ -286,6 +241,95 @@ int run_module(fcm_opts_t *opts, char *agent_file, char *data_file)
   return pID;
 }
 
+void pid_hash_send_signal(fcm_opts_t *opts, apr_hash_t *pid_hash, int signal)
+{
+  // Make a subpool from pool in the opts
+  apr_pool_t *subpool;
+  apr_pool_create(&subpool, opts->pool);
+
+  apr_hash_index_t *hi;
+  char *cpid_string = NULL;
+  pid_t *curr_pid = NULL;
+
+  //pallocs
+  cpid_string = apr_palloc(subpool, 8);
+  curr_pid = apr_palloc(subpool, 8);
+  if (apr_hash_count(pid_hash) != 0)
+  {
+    for (hi = apr_hash_first(subpool, pid_hash); hi; hi = apr_hash_next(hi))
+    {
+      // don't care about the length or value
+      apr_hash_this(hi, (void *)cpid_string, NULL, NULL);
+      // We've hit the end if we're null... shouldn't happen, but just in case
+      if (cpid_string != NULL)
+      {
+        *curr_pid = apr_atoi64(cpid_string);
+        kill(*curr_pid, signal);
+      }
+    }
+  }
+  apr_pool_destroy(subpool);
+}
+
+// Return number of pids left when exiting
+// 0 if all pids exited
+int pid_hash_wait_with_timeout(fcm_opts_t *opts, apr_hash_t *pid_hash, int timeout)
+{
+  // Make a subpool from pool in the opts
+  apr_pool_t *subpool;
+  apr_pool_create(&subpool, opts->pool);
+
+  apr_hash_index_t *hi;
+  apr_time_t *now_micro;
+  apr_time_t *until_micro;
+  char *cpid_string = NULL;
+  char *module_name = NULL;
+  int *cstatus;
+  pid_t *cpid;
+  pid_t *curr_pid = NULL;
+
+  //pallocs
+  now_micro = apr_palloc(subpool, sizeof(apr_time_t));
+  until_micro = apr_palloc(subpool, sizeof(apr_time_t));
+  cpid_string = apr_palloc(subpool, 8);
+  module_name = apr_palloc(subpool, PATH_MAX);
+  cstatus = apr_palloc(subpool, sizeof(int));
+  cpid = apr_palloc(subpool, sizeof(pid_t));
+  curr_pid = apr_palloc(subpool, sizeof(pid_t));
+
+  *until_micro = (apr_time_now() + (timeout * 1000000));
+
+  while ((apr_hash_count(pid_hash) != 0) && (*until_micro > apr_time_now()))
+  {
+    apr_file_printf(opts->out, "Looking at hash\n");
+    for (hi = apr_hash_first(subpool, pid_hash); hi; hi = apr_hash_next(hi))
+    {
+      // don't care about the length or value
+      apr_hash_this(hi, (void *)cpid_string, NULL, NULL);
+      // We've hit the end if we're null
+      if (cpid_string != NULL)
+      {
+        *curr_pid = apr_atoi64(cpid_string);
+        *cpid = waitpid(*curr_pid, cstatus, WNOHANG);
+        // WNOHANG returns -1 on state change, 0 on no change
+        if (cpid != 0)
+        {
+          // get our module name
+          module_name = apr_hash_get(pid_hash, cpid_string, APR_HASH_KEY_STRING);
+          // print some stuff
+          apr_file_printf(opts->out, "Child %s (%s) terminated with ret code %i\n", module_name, cpid_string, *cstatus);
+          // remove the running pid entry
+          apr_hash_set(pid_hash, cpid_string, APR_HASH_KEY_STRING, NULL);
+        }
+      }
+    }
+  }
+  apr_pool_destroy(subpool);
+  return apr_hash_count(pid_hash);
+}
+
 int check_pause(fcm_opts_t *opts, char *agent_file)
 {
+  // not implemented yet
+  return 0;
 }
