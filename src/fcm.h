@@ -36,6 +36,5 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]);
 int pid_hash_wait_with_timeout(fcm_opts_t *opts, apr_hash_t *pid_hash, int timeout);
 void pid_hash_send_signal(fcm_opts_t *opts, apr_hash_t *pid_hash, int signal);
 int find_or_merge_dir(fcm_opts_t *opts, char **dir);
-int read_pause_file(fcm_opts_t *opts, char *module_name);
 
 #endif

@@ -119,8 +119,10 @@ void agent_loop(fcm_opts_t *opts)
   struct dirent *file;
   struct stat *af;
   struct stat *df;
+  struct stat *pf;
   char *agent_file = NULL;
   char *data_file = NULL;
+  char *pause_file = NULL;
   char *pid_string = NULL;
   apr_hash_t *pid_map = NULL;
   apr_hash_t *running_pids = NULL;
@@ -143,8 +145,10 @@ void agent_loop(fcm_opts_t *opts)
     file = apr_palloc(subpool, sizeof(struct dirent));
     af = apr_palloc(subpool, sizeof(struct stat));
     df = apr_palloc(subpool, sizeof(struct stat));
+    pf = apr_palloc(subpool, sizeof(struct stat));
     agent_file = apr_palloc(subpool, PATH_MAX);
     data_file = apr_palloc(subpool, PATH_MAX);
+    pause_file = apr_palloc(subpool, PATH_MAX);
     pid_string = apr_palloc(subpool, 8);
     pid_map = apr_hash_make(subpool);
     now_micro = apr_palloc(subpool, sizeof(apr_time_t));
@@ -175,12 +179,20 @@ void agent_loop(fcm_opts_t *opts)
           if (opts->verbose) apr_file_printf(opts->out, "Found: %s/%s\n", opts->agent_dir, file->d_name);
           agent_file = apr_psprintf(subpool, "%s/%s", opts->agent_dir, file->d_name);
           data_file = apr_psprintf(subpool, "%s/%s", opts->data_dir, file->d_name);
+          pause_file = apr_psprintf(subpool, "%s/%s", opts->pause_dir, file->d_name);
           if (stat(agent_file, af) == 0 && S_ISREG(af->st_mode) && stat(data_file, df) == 0 && S_ISREG(df->st_mode))
           {
-            apr_file_printf(opts->out, "Running: %s %s\n", agent_file, data_file);
-            *mod_pid = run_module(opts, agent_file, data_file);
-            pid_string = apr_itoa(subpool, *mod_pid);
-            apr_hash_set(pid_map, pid_string, APR_HASH_KEY_STRING, agent_file);
+            if (stat(pause_file, pf) == 0 && S_ISREG(pf->st_mode))
+            {
+              if (opts->verbose) apr_file_printf(opts->out, "%s is paused, skipping...\n", file->d_name);
+            }
+            else
+            {
+              apr_file_printf(opts->out, "Running: %s %s\n", agent_file, data_file);
+              *mod_pid = run_module(opts, agent_file, data_file);
+              pid_string = apr_itoa(subpool, *mod_pid);
+              apr_hash_set(pid_map, pid_string, APR_HASH_KEY_STRING, agent_file);
+            }
           }
           else
           {
@@ -343,10 +355,4 @@ int pid_hash_wait_with_timeout(fcm_opts_t *opts, apr_hash_t *pid_hash, int timeo
   }
   apr_pool_destroy(subpool);
   return apr_hash_count(pid_hash);
-}
-
-int check_pause(fcm_opts_t *opts, char *agent_file)
-{
-  // not implemented yet
-  return 0;
 }
