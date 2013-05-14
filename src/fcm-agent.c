@@ -9,7 +9,7 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
   int c;
   char full_path[PATH_MAX];
 
-  while ((c = getopt (argc, argv, "a:b:d:hoi:v")) != -1)
+  while ((c = getopt (argc, argv, "a:b:d:hop:i:v")) != -1)
   {
     switch (c)
     {
@@ -26,20 +26,25 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
         opts->data_dir = apr_pmemdup(opts->pool, full_path, sizeof(full_path));
         break;
       case 'h':
-        apr_file_printf(opts->out, "Usage: fcm-agent [adhsv]\n");
-        apr_file_printf(opts->out, "-a: Agent directory\n");
-        apr_file_printf(opts->out, "-b: Base FCM dir\n");
-        apr_file_printf(opts->out, "-d: Data directory\n");
-        apr_file_printf(opts->out, "-r: csv of scripts to run\n");
-        apr_file_printf(opts->out, "-i: iteration time (in seconds)\n");
-        apr_file_printf(opts->out, "-v: print verbose messages\n");
+        apr_file_printf(opts->out, "Usage: fcm-agent [abdhiprv]\n");
+        apr_file_printf(opts->out, "-a <dir>: Agent directory\n");
+        apr_file_printf(opts->out, "-b <dir>: Base FCM dir\n");
+        apr_file_printf(opts->out, "-d <dir>: Data directory\n");
         apr_file_printf(opts->out, "-h: this help message\n");
+        apr_file_printf(opts->out, "-i <seconds>: iteration time (in seconds)\n");
+        apr_file_printf(opts->out, "-o: run once (don't iterate)\n");
+        apr_file_printf(opts->out, "-p <dir>: Pause directory\n");
+        apr_file_printf(opts->out, "-v: print verbose messages\n");
         return 1;
       case 'i':
         opts->itr_time = apr_atoi64(optarg);
         break;
       case 'o':
         opts->run_once = 1;
+        break;
+      case 'p':
+        realpath(optarg, full_path);
+        opts->pause_dir = apr_pmemdup(opts->pool, full_path, sizeof(full_path));
         break;
       case 'v':
         opts->verbose = 1;
@@ -66,6 +71,7 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
 
   if (find_or_merge_dir(opts, &(opts->agent_dir)) != 0) return 1;
   if (find_or_merge_dir(opts, &(opts->data_dir)) != 0) return 1;
+  apr_file_printf(opts->out, "Pause Dir: %s\n", opts->pause_dir);
   if (find_or_merge_dir(opts, &(opts->pause_dir)) != 0) return 1;
 
   // Print during the first run
@@ -99,7 +105,7 @@ int find_or_merge_dir(fcm_opts_t *opts, char **dir)
   {
     if (check_dir_exists(cat_dir) != 0)
     {
-      apr_file_printf(opts->err, "Directory does not exist: %s\n", *cat_dir);
+      apr_file_printf(opts->err, "Directory does not exist: %s\n", cat_dir);
       apr_pool_destroy(subpool);
       return 1;
     }
