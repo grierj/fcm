@@ -8,17 +8,7 @@
 int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
   int c;
   char full_path[PATH_MAX];
-  // Wat?
-  //char with_base_path[PATH_MAX];
 
-  // Args
-  // -a = agent dir
-  // -d = data dir
-  // -h = help
-  // -o = run once
-  // -s = sleep time
-  // -v = verbose
-  //
   while ((c = getopt (argc, argv, "a:b:d:hoi:v")) != -1)
   {
     switch (c)
@@ -74,13 +64,14 @@ int fcm_parse_opts(fcm_opts_t *opts, int argc, char *argv[]) {
     return 1;
   }
 
-  if (check_dir_exists(opts->agent_dir) != 0)
-  {
-    //What was I doing here?
-    //with_base_path = apr_pstrcat(opts->pool, opts->base_dir, "/", opts->agent_dir);
-    opts->agent_dir = apr_pstrcat(opts->pool, opts->base_dir, "/", opts->agent_dir);
-  }
+  if (find_or_merge_dir(opts, &(opts->agent_dir)) != 0) return 1;
+  if (find_or_merge_dir(opts, &(opts->data_dir)) != 0) return 1;
+  if (find_or_merge_dir(opts, &(opts->pause_dir)) != 0) return 1;
 
+  // Print during the first run
+  apr_file_printf(opts->out, "Agent Dir: %s\n", opts->agent_dir);
+  apr_file_printf(opts->out, "Data Dir: %s\n", opts->data_dir);
+  apr_file_printf(opts->out, "Pause Dir: %s\n", opts->pause_dir);
 
   return 0;
 }
@@ -92,6 +83,32 @@ int check_dir_exists(char *dir)
   {
     return 1;
   }
+  return 0;
+}
+
+int find_or_merge_dir(fcm_opts_t *opts, char **dir)
+{
+  apr_pool_t *subpool;
+  apr_pool_create(&subpool, opts->pool);
+
+  char *cat_dir = NULL;
+
+  cat_dir = apr_pstrcat(subpool, opts->base_dir, "/",  *dir, NULL);
+
+  if (check_dir_exists(*dir) != 0)
+  {
+    if (check_dir_exists(cat_dir) != 0)
+    {
+      apr_file_printf(opts->err, "Directory does not exist: %s\n", *cat_dir);
+      apr_pool_destroy(subpool);
+      return 1;
+    }
+    else
+    {
+      *(dir) = apr_pstrdup(opts->pool, cat_dir);
+    }
+  }
+  apr_pool_destroy(subpool);
   return 0;
 }
 

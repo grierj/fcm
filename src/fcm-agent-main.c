@@ -36,8 +36,9 @@ int main(int argc, char *argv[])
   // Set up some defaults that we will blow away with command line args
   // if need be
   opts->base_dir = apr_pstrdup(pool, "/var/fcm");
-  opts->agent_dir = NULL;
-  opts->data_dir = NULL;
+  opts->agent_dir = apr_pstrdup(pool, "agents");
+  opts->data_dir = apr_pstrdup(pool, "data");
+  opts->pause_dir = apr_pstrdup(pool, "pause");
   opts->itr_time = 600;
   opts->verbose = 0;
   opts->run_once = 0;
